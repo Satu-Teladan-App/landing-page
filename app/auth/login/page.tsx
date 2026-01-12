@@ -311,13 +311,14 @@ function LoginForm() {
             transition={{ delay: 0.2 }}
             className="text-center text-gray-500 text-sm mt-8"
           >
-            Butuh bantuan? Hubungi kami di{" "}
+            Butuh bantuan? Hubungi{" "}
             <a
-              href="mailto:support@satuteladan.id"
+              href="mailto:katymentor@gmail.com"
               className="text-gray-900 font-medium hover:underline"
             >
-              support@satuteladan.id
-            </a>
+              katymentor@gmail.com
+            </a>{" "}
+            untuk support.
           </motion.p>
         </div>
       </div>
