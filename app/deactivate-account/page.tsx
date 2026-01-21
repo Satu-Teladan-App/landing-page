@@ -3,31 +3,37 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
-  Trash2,
+  UserX,
+  UserCheck,
   AlertTriangle,
   ArrowLeft,
   CheckCircle,
   Loader2,
   LogIn,
+  Shield,
 } from "lucide-react";
 import Link from "next/link";
+import { checkAuthStatus } from "@/lib/api/account-deletion";
 import {
-  checkAuthStatus,
-  submitDeletionRequest,
-} from "@/lib/api/account-deletion";
+  getDeactivationStatus,
+  updateDeactivationStatus,
+} from "@/lib/api/account-deactivation";
 import SupportChatButton from "@/components/SupportChatButton";
 
-export default function HapusAkunPage() {
+export default function DeactivateAccountPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [email, setEmail] = useState("");
+  const [isDeactivated, setIsDeactivated] = useState(false);
   const [confirmText, setConfirmText] = useState("");
-  const [reason, setReason] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState("");
+  const [actionType, setActionType] = useState<"deactivate" | "reactivate">(
+    "deactivate",
+  );
 
-  // Check if user is logged in
+  // Check if user is logged in and get deactivation status
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -36,6 +42,15 @@ export default function HapusAkunPage() {
         if (authStatus.authenticated && authStatus.user) {
           setIsLoggedIn(true);
           setEmail(authStatus.user.email || "");
+
+          // Get deactivation status
+          try {
+            const deactivated = await getDeactivationStatus();
+            setIsDeactivated(deactivated);
+            setActionType(deactivated ? "reactivate" : "deactivate");
+          } catch (err) {
+            console.error("Error fetching deactivation status:", err);
+          }
         } else {
           setIsLoggedIn(false);
         }
@@ -50,31 +65,28 @@ export default function HapusAkunPage() {
     checkAuth();
   }, []);
 
-  const isFormValid =
-    email.includes("@") &&
-    confirmText === "HAPUS AKUN" &&
-    reason.trim().length >= 10;
+  const expectedConfirmText =
+    actionType === "deactivate" ? "NONAKTIFKAN AKUN" : "AKTIFKAN AKUN";
+  const isFormValid = confirmText === expectedConfirmText;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
     if (!isFormValid) {
-      setError("Mohon lengkapi semua field dengan benar");
+      setError("Mohon konfirmasi dengan teks yang benar");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      await submitDeletionRequest({
-        email,
-        reason: reason.trim(),
-      });
+      await updateDeactivationStatus(actionType === "deactivate");
 
       // On success
       setIsLoading(false);
       setIsSuccess(true);
+      setIsDeactivated(actionType === "deactivate");
     } catch (err) {
       setIsLoading(false);
       setError(
@@ -86,8 +98,14 @@ export default function HapusAkunPage() {
   };
 
   const handleLogin = () => {
-    // Redirect to Supabase auth with redirect back to this page
-    window.location.href = `/auth/login?redirect=/hapusakun`;
+    window.location.href = `/auth/login?redirect=/deactivate-account`;
+  };
+
+  const handleReset = () => {
+    setIsSuccess(false);
+    setConfirmText("");
+    setError("");
+    setActionType(isDeactivated ? "reactivate" : "deactivate");
   };
 
   // Show loading state while checking authentication
@@ -137,8 +155,8 @@ export default function HapusAkunPage() {
               Login Diperlukan
             </h1>
             <p className="text-gray-600 mb-8">
-              Anda harus login terlebih dahulu untuk dapat mengajukan permintaan
-              penghapusan akun. Ini untuk memastikan keamanan data Anda.
+              Anda harus login terlebih dahulu untuk dapat mengelola status akun
+              Anda. Ini untuk memastikan keamanan data Anda.
             </p>
             <div className="space-y-4">
               <button
@@ -168,24 +186,43 @@ export default function HapusAkunPage() {
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-md w-full text-center"
         >
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <CheckCircle className="w-10 h-10 text-green-600" />
+          <div
+            className={`w-20 h-20 ${
+              actionType === "deactivate" ? "bg-orange-100" : "bg-green-100"
+            } rounded-full flex items-center justify-center mx-auto mb-6`}
+          >
+            <CheckCircle
+              className={`w-10 h-10 ${
+                actionType === "deactivate"
+                  ? "text-orange-600"
+                  : "text-green-600"
+              }`}
+            />
           </div>
           <h1 className="text-3xl font-black text-gray-900 mb-4">
-            Permintaan Diterima
+            {actionType === "deactivate"
+              ? "Akun Berhasil Dinonaktifkan"
+              : "Akun Berhasil Diaktifkan Kembali"}
           </h1>
           <p className="text-gray-600 mb-8">
-            Permintaan penghapusan akun Anda telah kami terima. Tim kami akan
-            memproses permintaan ini dalam waktu 3-5 hari kerja. Anda akan
-            menerima konfirmasi melalui email.
+            {actionType === "deactivate"
+              ? "Akun Anda telah dinonaktifkan. Anda masih dapat mengaktifkan kembali akun Anda kapan saja dengan mengunjungi halaman ini."
+              : "Selamat datang kembali! Akun Anda telah diaktifkan dan Anda dapat menggunakan semua fitur aplikasi."}
           </p>
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white font-semibold rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            <ArrowLeft size={18} />
-            Kembali ke Beranda
-          </Link>
+          <div className="space-y-4">
+            <button
+              onClick={handleReset}
+              className="w-full px-6 py-3 bg-gray-900 text-white font-semibold rounded-lg hover:bg-gray-800 transition-colors"
+            >
+              Ubah Status Lagi
+            </button>
+            <Link
+              href="/"
+              className="block text-gray-600 hover:text-gray-900 font-medium transition-colors"
+            >
+              Kembali ke Beranda
+            </Link>
+          </div>
         </motion.div>
       </div>
     );
@@ -215,25 +252,70 @@ export default function HapusAkunPage() {
       {/* Content */}
       <div className="container mx-auto px-6 py-16">
         <div className="max-w-xl mx-auto">
-          {/* Warning Card */}
+          {/* Status Badge */}
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex justify-center mb-8"
+          >
+            <div
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${
+                isDeactivated
+                  ? "bg-orange-100 text-orange-700"
+                  : "bg-green-100 text-green-700"
+              }`}
+            >
+              <Shield size={18} />
+              <span className="font-semibold">
+                Status Akun: {isDeactivated ? "Dinonaktifkan" : "Aktif"}
+              </span>
+            </div>
+          </motion.div>
+
+          {/* Warning/Info Card */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-red-50 border-2 border-red-200 rounded-2xl p-6 mb-8"
+            className={`${
+              actionType === "deactivate"
+                ? "bg-orange-50 border-orange-200"
+                : "bg-blue-50 border-blue-200"
+            } border-2 rounded-2xl p-6 mb-8`}
           >
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-6 h-6 text-red-600" />
+              <div
+                className={`w-12 h-12 ${
+                  actionType === "deactivate" ? "bg-orange-100" : "bg-blue-100"
+                } rounded-full flex items-center justify-center shrink-0`}
+              >
+                {actionType === "deactivate" ? (
+                  <AlertTriangle className="w-6 h-6 text-orange-600" />
+                ) : (
+                  <UserCheck className="w-6 h-6 text-blue-600" />
+                )}
               </div>
               <div>
-                <h2 className="text-xl font-bold text-red-900 mb-2">
-                  Perhatian!
+                <h2
+                  className={`text-xl font-bold ${
+                    actionType === "deactivate"
+                      ? "text-orange-900"
+                      : "text-blue-900"
+                  } mb-2`}
+                >
+                  {actionType === "deactivate"
+                    ? "Perhatian!"
+                    : "Aktivasi Kembali"}
                 </h2>
-                <p className="text-red-700">
-                  Penghapusan akun bersifat permanen dan tidak dapat dibatalkan.
-                  Semua data Anda termasuk riwayat aktivitas, preferensi, dan
-                  informasi profil akan dihapus secara permanen dari sistem
-                  kami.
+                <p
+                  className={
+                    actionType === "deactivate"
+                      ? "text-orange-700"
+                      : "text-blue-700"
+                  }
+                >
+                  {actionType === "deactivate"
+                    ? "Menonaktifkan akun akan membatasi akses Anda ke aplikasi. Namun, akun Anda tidak akan dihapus dan dapat diaktifkan kembali kapan saja."
+                    : "Mengaktifkan kembali akun akan mengembalikan semua akses Anda ke aplikasi dan fitur-fiturnya."}
                 </p>
               </div>
             </div>
@@ -247,20 +329,31 @@ export default function HapusAkunPage() {
             className="bg-white border-2 border-gray-200 rounded-2xl p-8"
           >
             <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Trash2 className="w-8 h-8 text-gray-600" />
+              <div
+                className={`w-16 h-16 ${
+                  actionType === "deactivate" ? "bg-orange-100" : "bg-green-100"
+                } rounded-full flex items-center justify-center mx-auto mb-4`}
+              >
+                {actionType === "deactivate" ? (
+                  <UserX className="w-8 h-8 text-orange-600" />
+                ) : (
+                  <UserCheck className="w-8 h-8 text-green-600" />
+                )}
               </div>
               <h1 className="text-3xl font-black text-gray-900 mb-2">
-                Hapus Akun
+                {actionType === "deactivate"
+                  ? "Nonaktifkan Akun"
+                  : "Aktifkan Akun Kembali"}
               </h1>
               <p className="text-gray-600">
-                Untuk menghapus akun Anda, silakan lengkapi formulir di bawah
-                ini.
+                {actionType === "deactivate"
+                  ? "Konfirmasi untuk menonaktifkan akun Anda sementara."
+                  : "Konfirmasi untuk mengaktifkan kembali akun Anda."}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Email Field */}
+              {/* Email Field (Read-only) */}
               <div>
                 <label
                   htmlFor="email"
@@ -272,37 +365,9 @@ export default function HapusAkunPage() {
                   type="email"
                   id="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Masukkan email yang terdaftar"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-gray-900 focus:outline-none transition-colors text-gray-900 bg-gray-50"
-                  required
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-900"
                   disabled
                 />
-                <p className="text-sm text-gray-500 mt-1">
-                  Email dari akun yang sedang login.
-                </p>
-              </div>
-
-              {/* Reason Field */}
-              <div>
-                <label
-                  htmlFor="reason"
-                  className="block text-sm font-semibold text-gray-900 mb-2"
-                >
-                  Alasan Penghapusan <span className="text-red-600">*</span>
-                </label>
-                <textarea
-                  id="reason"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Jelaskan alasan Anda ingin menghapus akun (minimal 10 karakter)"
-                  rows={4}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-gray-900 focus:outline-none transition-colors text-gray-900 resize-none"
-                  required
-                />
-                <p className="text-sm text-gray-500 mt-1">
-                  {reason.length}/10 karakter minimal
-                </p>
               </div>
 
               {/* Confirmation Field */}
@@ -311,23 +376,23 @@ export default function HapusAkunPage() {
                   htmlFor="confirm"
                   className="block text-sm font-semibold text-gray-900 mb-2"
                 >
-                  Konfirmasi Penghapusan
+                  Konfirmasi Tindakan
                 </label>
                 <input
                   type="text"
                   id="confirm"
                   value={confirmText}
                   onChange={(e) => setConfirmText(e.target.value.toUpperCase())}
-                  placeholder="Ketik HAPUS AKUN"
+                  placeholder={`Ketik ${expectedConfirmText}`}
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-gray-900 focus:outline-none transition-colors text-gray-900 font-mono"
                   required
                 />
                 <p className="text-sm text-gray-500 mt-1">
                   Ketik{" "}
                   <span className="font-mono font-bold text-gray-700">
-                    HAPUS AKUN
+                    {expectedConfirmText}
                   </span>{" "}
-                  untuk mengonfirmasi penghapusan.
+                  untuk mengonfirmasi.
                 </p>
               </div>
 
@@ -338,27 +403,37 @@ export default function HapusAkunPage() {
                 </div>
               )}
 
-              {/* What will be deleted */}
+              {/* What will happen */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-900 mb-3">
-                  Data yang akan dihapus:
+                  {actionType === "deactivate"
+                    ? "Yang akan terjadi:"
+                    : "Yang akan dipulihkan:"}
                 </h3>
                 <ul className="space-y-2 text-sm text-gray-600">
                   <li className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
-                    Informasi profil dan preferensi
+                    {actionType === "deactivate"
+                      ? "Akses ke aplikasi akan dibatasi"
+                      : "Akses penuh ke aplikasi"}
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
-                    Riwayat aktivitas dalam aplikasi
+                    {actionType === "deactivate"
+                      ? "Data Anda akan tetap tersimpan"
+                      : "Semua fitur dapat digunakan kembali"}
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
-                    Data koneksi dan interaksi
+                    {actionType === "deactivate"
+                      ? "Anda dapat mengaktifkan kembali kapan saja"
+                      : "Profil Anda akan aktif kembali"}
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
-                    Semua data terkait akun lainnya
+                    {actionType === "deactivate"
+                      ? "Tidak ada data yang akan dihapus"
+                      : "Notifikasi akan aktif kembali"}
                   </li>
                 </ul>
               </div>
@@ -369,7 +444,9 @@ export default function HapusAkunPage() {
                 disabled={!isFormValid || isLoading}
                 className={`w-full py-4 rounded-lg font-bold text-lg transition-all flex items-center justify-center gap-2 ${
                   isFormValid && !isLoading
-                    ? "bg-red-600 hover:bg-red-700 text-white cursor-pointer"
+                    ? actionType === "deactivate"
+                      ? "bg-orange-600 hover:bg-orange-700 text-white cursor-pointer"
+                      : "bg-green-600 hover:bg-green-700 text-white cursor-pointer"
                     : "bg-gray-200 text-gray-500 cursor-not-allowed"
                 }`}
               >
@@ -378,10 +455,15 @@ export default function HapusAkunPage() {
                     <Loader2 className="w-5 h-5 animate-spin" />
                     Memproses...
                   </>
+                ) : actionType === "deactivate" ? (
+                  <>
+                    <UserX className="w-5 h-5" />
+                    Nonaktifkan Akun
+                  </>
                 ) : (
                   <>
-                    <Trash2 className="w-5 h-5" />
-                    Hapus Akun Saya
+                    <UserCheck className="w-5 h-5" />
+                    Aktifkan Akun
                   </>
                 )}
               </button>
